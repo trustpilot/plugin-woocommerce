@@ -1,0 +1,28 @@
+
+.trustpilot {
+    margin-bottom:.5rem;
+}
+
+#toplevel_page_woocommerce-trustpilot-settings-page div.wp-menu-image {
+    background: url('../images/logo.svg')!important;
+    background-size: 22px 20px!important;
+    background-repeat: no-repeat!important;
+    background-position: center!important;
+    padding: 0 0 0 0!important;
+}
+
+#toplevel_page_woocommerce-trustpilot-settings-page div.wp-menu-image::before {
+    content: none;
+}
+
+.form-table th {
+    width: 300px;
+}
+
+.buttons-container {
+    width: 501px;
+}
+#save_trustpilot_settings {
+    float: right;
+    margin-left: 5px;
+}
