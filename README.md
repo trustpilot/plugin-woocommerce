@@ -11,7 +11,7 @@ Please open an issue or submit a PR, we will be more than happy to help
 
 ## How to install the Trustpilot extension
 
-1. Download the WooCommerce plugin to your computer.
+1. Download the WooCommerce plugin to your computer. __https://ecommplugins-pluginrepo.trustpilot.com/woocommerce/trustpilot.zip__
 2. Log in to your __WordPress Admin page__ and install it
 3. Go to __Plugins > Add New__
 4. Click on __Upload Plugin__ at the top of the page.
