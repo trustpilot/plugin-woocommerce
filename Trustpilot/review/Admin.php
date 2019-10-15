@@ -59,11 +59,14 @@ class Admin {
         add_action( 'wp_ajax_handle_save_changes', array( $this, 'trustpilot_save_changes' ) );
         add_action( 'wp_ajax_update_trustpilot_plugin', array( $this, 'wc_update_trustpilot_plugin' ) );
         add_action( 'wp_ajax_reload_trustpilot_settings', array( $this, 'wc_reload_trustpilot_settings' ) );
+        add_action( 'wp_ajax_check_product_skus', array( $this, 'trustpilot_check_product_skus' ) );
+        add_action( 'wp_ajax_get_signup_data', array( $this, 'trustpilot_get_signup_data' ) );
 
         // Add the options page and menu item.
         add_action( 'admin_menu', array( $this, 'trustpilot_menu' ) );
         // Include Http client
         include(plugin_dir_path( __FILE__ ) . 'api/TrustpilotHttpClient.php');
+        include(plugin_dir_path( __FILE__ ) . 'api/TrustpilotPluginStatus.php');
         include(plugin_dir_path( __FILE__ ) . 'util/Logger.php');
     }
 
@@ -135,6 +138,19 @@ class Admin {
         die();
     }
 
+    public function trustpilot_check_product_skus() {
+        $products = Products::get_instance();
+        $results = $products->trustpilot_check_skus($_POST['skuSelector']);
+        echo json_encode($results);
+        die();
+    }
+
+    public function trustpilot_get_signup_data() {
+        $results = base64_encode(json_encode($this->get_business_information()));
+        echo $results;
+        die();
+    }
+
     private function trustpilot_get_past_orders_info() {
         $orders = PastOrders::get_instance();
         $info = $orders->get_past_orders_info();
@@ -201,19 +217,45 @@ class Admin {
     }
 
     public function get_product_identification_options() {
-        $fields = ['none', 'sku', 'id'];
-        $optionalFields = ['upc', 'isbn', 'brand', 'mpn', 'gtin'];
+        $fields = array('none', 'sku', 'id');
+        $optionalFields = array('upc', 'isbn', 'brand');
+        $dynamicFields = array('mpn', 'gtin');
         $attrs = array_map(function ($t) { return $t->attribute_name; }, wc_get_attribute_taxonomies());
-
         foreach ($attrs as $attr) {
             foreach ($optionalFields as $field) {
                 if ($attr == $field && !in_array($field, $fields)) {
                     array_push($fields, $field);
                 }
             }
+            foreach ($dynamicFields as $field) {
+                if (stripos($attr, $field) !== false) {
+                    array_push($fields, $attr);
+                }
+            }
         }
 
         return json_encode($fields);
+    }
+
+    public function format_url($siteUrl) {
+        $newUrl = (parse_url($siteUrl, PHP_URL_HOST) != '') ? parse_url($siteUrl, PHP_URL_HOST) : $siteUrl;
+        return preg_replace('/^www./', '', $newUrl);
+    }
+
+    public function get_business_country() {
+        return \WC_Geolocation::geolocate_ip('', true, true)['country'] ?: WC()->countries->get_base_country();
+    }
+
+    public function get_business_information() {
+        $owner = is_super_admin() ? wp_get_current_user() : get_user_by('login', get_super_admins()[0]);
+        $this->get_business_country();
+        return array(
+            'website' => $this->format_url(get_site_url()),
+            'company' => html_entity_decode(get_bloginfo( 'name' ), ENT_QUOTES),
+            'name' => html_entity_decode($owner ? $owner->first_name . ' ' . $owner->last_name : '', ENT_QUOTES),
+            'email' => get_bloginfo('admin_email'),
+            'country' => $this->get_business_country(),
+        );
     }
 
     private function load_iframe() {
@@ -233,48 +275,114 @@ class Admin {
         $version = trustpilot_get_woo_version_number();
         $startingUrl = trustpilot_get_page_url('landing');
         $productIdentificationOptions = $this->get_product_identification_options();
+        $configuration_scope_tree = base64_encode(json_encode($this->get_configuration_scope_tree()));
+        $pluginStatus = base64_encode(json_encode(trustpilot_get_field(TRUSTPILOT_PLUGIN_STATUS)));
         return "
+            <script type='text/javascript'>
+                function onTrustpilotIframeLoad() {
+                    if (typeof sendSettings === 'function' && typeof sendPastOrdersInfo === 'function') {
+                        sendSettings();
+                        sendPastOrdersInfo();
+                    } else {
+                        window.addEventListener('load', function () {
+                            sendSettings();
+                            sendPastOrdersInfo();
+                        });
+                    }
+                }
+            </script>
             <div style='display:block;'>
-            <iframe
-                style='display: inline-block;'
-                src='" . $integration_app_url . "'
-                id='configuration_iframe'
-                frameborder='0'
-                scrolling='no'
-                width='100%'
-                height='1400px'
-                data-plugin-version='" . TRUSTPILOT_PLUGIN_VERSION . "'
-                data-source='WooCommerce'
-                data-version='WooCommerce-" . $version . "'
-                data-page-urls='" . $pageUrlsBase64 . "'
-                data-transfer='" . $integration_app_url . "'
-                data-past-orders='" . $past_orders_info . "'
-                data-settings='" . $settings . "'
-                data-product-identification-options = '" . $productIdentificationOptions . "'
-                data-is-from-marketplace = '" . TRUSTPILOT_IS_FROM_MARKETPLACE . "'
-                onload='sendSettings(); sendPastOrdersInfo();'>
-            </iframe>
-            <div id='trustpilot-trustbox-preview'
-                hidden='true'
-                data-page-urls='" . $pageUrlsBase64 . "'
-                data-custom-trustboxes='" . $customTrustBoxes . "'
-                data-settings='" . $settings . "'
-                data-src='" . $startingUrl . "'
-                data-name='" . $name . "'
-                data-sku='" . $sku . "'
-                data-source='WooCommerce'>
+                <iframe
+                    style='display: inline-block;'
+                    src='" . $integration_app_url . "'
+                    id='configuration_iframe'
+                    frameborder='0'
+                    scrolling='no'
+                    width='100%'
+                    height='1400px'
+                    data-plugin-version='" . TRUSTPILOT_PLUGIN_VERSION . "'
+                    data-source='WooCommerce'
+                    data-version='WooCommerce-" . $version . "'
+                    data-page-urls='" . $pageUrlsBase64 . "'
+                    data-transfer='" . $integration_app_url . "'
+                    data-past-orders='" . $past_orders_info . "'
+                    data-settings='" . $settings . "'
+                    data-product-identification-options='" . $productIdentificationOptions . "'
+                    data-is-from-marketplace='" . TRUSTPILOT_IS_FROM_MARKETPLACE . "'
+                    data-configuration-scope-tree='" . $configuration_scope_tree . "'
+                    data-plugin-status='" . $pluginStatus . "'
+                    onload='onTrustpilotIframeLoad();'>
+                </iframe>
+                <div id='trustpilot-trustbox-preview'
+                    hidden='true'
+                    data-page-urls='" . $pageUrlsBase64 . "'
+                    data-custom-trustboxes='" . $customTrustBoxes . "'
+                    data-settings='" . $settings . "'
+                    data-src='" . $startingUrl . "'
+                    data-name='" . $name . "'
+                    data-sku='" . $sku . "'
+                    data-source='WooCommerce'>
+                </div>
+                <script src='" . TRUSTPILOT_TRUSTBOX_PREVIEW_URL . "' id='TrustBoxPreviewComponent'></script>
             </div>
-            <script src='" . TRUSTPILOT_TRUSTBOX_PREVIEW_URL . "' id='TrustBoxPreviewComponent'></script>
-        </div>
         ";
     }
 
+    private function get_configuration_scope_tree() {
+        if (is_multisite()) { // Multisite
+            $networks = array();
+            $sites = array();
+            $args = array('public' => 1, 'deleted' => 0, 'archived' => 0, 'limit' => 0);
+            if (function_exists('get_sites')) {
+                $sites = get_sites($args); // WordPress >= 4.6
+            } else if (function_exists('wp_get_sites')) {
+                $sites = wp_get_sites($args); // WordPress < 4.6
+            }
+            foreach ($sites as $site) {
+                array_push($networks, $this->get_network_info($site->blog_id));
+            }
+            return $networks;
+        } else { // Single site
+            return array(
+                array(
+                    'ids' => array(1),
+                    'names' => array('store' => get_bloginfo('name')),
+                    'domain' => preg_replace('#^https?://#', '', get_bloginfo('url')),
+                )
+            );
+        }
+    }
+
+    private function get_network_info($network_id) {
+        $network = get_blog_details($network_id);
+        return array(
+            'ids' => array($network->blog_id),
+            'names' => array('store' => $network->blogname),
+            'domain' => preg_replace(array('#^https?://#', '#/?$#'), '', $network->domain),
+        );
+    }
+
     private function get_protocol() {
-        return (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' || $_SERVER['SERVER_PORT'] == 443) ? "https:" : "http:";
+        return ((!empty($_SERVER['HTTPS']) && (strtolower($_SERVER['HTTPS']) == 'on' || $_SERVER['HTTPS'] == '1'))
+            || (!empty($_SERVER['SERVER_PORT']) && $_SERVER['SERVER_PORT'] == '443')) ? "https:" : "http:";
     }
 
     private function get_integration_app_url() {
-        return $this->get_protocol() . TRUSTPILOT_INTEGRATION_APP_URL;
+        $protocol = 'https:';
+        try {
+            $protocol = $this->get_protocol();
+        } catch (\Throwable $e) { // For PHP 7
+            $message = 'Unable get protocol of the website switching to default: ' . $protocol;
+            Logger::error($e, $message, array(
+                'protocol' => $protocol,
+            ));
+        } catch (\Exception $e) { // For PHP 5
+            $message = 'Unable get protocol of the website switching to default: ' . $protocol;
+            Logger::error($e, $message, array(
+                'protocol' => $protocol,
+            ));
+        }
+        return $protocol . TRUSTPILOT_INTEGRATION_APP_URL;
     }
 
     private function wc_display_trustpilot_settings() {

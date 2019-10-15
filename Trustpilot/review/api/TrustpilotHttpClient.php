@@ -4,9 +4,12 @@ namespace Trustpilot\Review;
 
 class TrustpilotHttpClient
 {
+    private $apiUrl;
+    private $trustpilotPluginStatus;
     public function __construct($apiUrl)
     {
         $this->apiUrl = $apiUrl;
+        $this->trustpilotPluginStatus = new TrustpilotPluginStatus();
     }
 
     public function post($url, $data)
@@ -20,9 +23,14 @@ class TrustpilotHttpClient
             'data_format' => 'body',
         );
         $res = wp_remote_post($url, $args);
+        $code = (int) wp_remote_retrieve_response_code($res);
+        $body = json_decode(wp_remote_retrieve_body($res));
+        if ($code > 250 && $code < 254) {
+            $this->trustpilotPluginStatus->setPluginStatus($code, $body);
+        }
         return array(
-            'code' => (int) wp_remote_retrieve_response_code($res),
-            'data' => json_decode(wp_remote_retrieve_body($res))
+            'code' => $code,
+            'data' => $body,
         );
     }
 
@@ -34,18 +42,32 @@ class TrustpilotHttpClient
     public function postLog($data) {
         try {
             return $this->post($this->apiUrl . 'log', $data);
-        } catch (Exception $e) {
+        } catch (\Throwable $e) {
+            return false;
+        } catch (\Exception $e) {
             return false;
         }
     }
 
+    public function checkStatusAndPost($url, $data = array())
+    {
+        $origin = get_option('siteurl');
+        $code = $this->trustpilotPluginStatus->checkPluginStatus($origin);
+        if ($code > 250 && $code < 254) {
+            return array(
+                'code' => $code,
+            );
+        }
+        return $this->post($url, $data);
+    }
+
     public function postInvitation($key, $data = array())
     {
-        return $this->post($this->buildUrl($key, '/invitation'), $data);
+        return $this->checkStatusAndPost($this->buildUrl($key, '/invitation'), $data);
     }
 
     public function postBatchInvitations($key, $data = array())
     {
-        return $this->post($this->buildUrl($key, '/batchinvitations'), $data);
+        return $this->checkStatusAndPost($this->buildUrl($key, '/batchinvitations'), $data);
     }
 }

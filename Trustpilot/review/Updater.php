@@ -24,9 +24,10 @@ class Updater {
      * Return an instance of this class.
      */
     public static function get_instance() {
-        if ( null == self::$instance ) {
+        if (null == self::$instance) {
             self::$instance = new self;
         }
+
         return self::$instance;
     }
 
@@ -34,12 +35,12 @@ class Updater {
     {
         $args = array(
             'path' => ABSPATH.'wp-content/plugins/',
-            'trustpilot_preserve_zip' => false
+            'trustpilot_preserve_zip' => false,
         );
 
-        foreach($plugins as $plugin) {
-            $this->download_plugin($plugin['path'], $args['path'].$plugin['name'].'.zip');
-            $this->unpack_plugin($args, $args['path'].$plugin['name'].'.zip');
+        foreach ($plugins as $plugin) {
+            $this->download_plugin($plugin['path'], $args['path'] . $plugin['name'] . '.zip');
+            $this->unpack_plugin($args, $args['path'] . $plugin['name'] . '.zip');
             $this->activate_plugin($plugin['install']);
         }
     }
@@ -47,7 +48,8 @@ class Updater {
     protected function download_plugin($url, $path) {
         $response = wp_remote_get($url);
         $data = $response['body'];
-        if(file_put_contents($path, $data))
+
+        if (file_put_contents($path, $data))
             return true;
         else
             return false;
@@ -57,10 +59,12 @@ class Updater {
         WP_Filesystem();
         $destination_path = $args['path'];
         $unzipfile = unzip_file($target, $destination_path);
-        if ( is_wp_error( $unzipfile ) ) {
-            Logger::trustpilot_error_log('There was an error unzipping the file.');
+
+        if (is_wp_error($unzipfile)) {
+            // TODO: log as info message
         }
-        if($args['trustpilot_preserve_zip'] === false) {
+
+        if ($args['trustpilot_preserve_zip'] === false) {
             unlink($target);
         }
     }
@@ -69,7 +73,7 @@ class Updater {
         $current = get_option('active_plugins');
         $plugin = plugin_basename(trim($installer));
 
-        if(!in_array($plugin, $current)) {
+        if (!in_array($plugin, $current)) {
             $current[] = $plugin;
             sort($current);
             do_action('activate_plugin', trim($plugin));
@@ -77,9 +81,8 @@ class Updater {
             do_action('activate_'.trim($plugin));
             do_action('activated_plugin', trim($plugin));
             return true;
-        }
-        else
+        } else {
             return false;
+        }
     }
-
 }

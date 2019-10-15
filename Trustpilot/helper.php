@@ -15,6 +15,10 @@ function trustpilot_get_default_failed_orders() {
     return '{}';
 }
 
+function trustpilot_get_default_plugin_status() {
+    return '{"pluginStatus": 200, "blockedDomains": []}';
+}
+
 function trustpilot_get_field($field) {
     return json_decode(stripslashes(get_option($field, '{}')));
 }
@@ -59,11 +63,20 @@ function trustpilot_get_page_url($page) {
                 $url = trustpilot_get_landing_url();
         }
         if (is_wp_error($url)) {
-            throw new Exception($url->get_error_message());
+            throw new \Exception($url->get_error_message());
         }
         return str_replace(['http:', 'https:'],'', $url);
-    } catch (Exception $e) {
-        trustpilot_log_error('Unable to find URL for a page ' . $page . '. Error: ' . $e->getMessage());
+    } catch (\Throwable $e) {
+        $message = 'Unable to find URL for a page ' . $page;
+        Logger::error($e, $message, array(
+            'page' => $page,
+        ));
+        return str_replace(['http:', 'https:'],'', get_home_url());
+    } catch (\Exception $e) {
+        $message = 'Unable to find URL for a page ' . $page;
+        Logger::error($e, $message, array(
+            'page' => $page,
+        ));
         return str_replace(['http:', 'https:'],'', get_home_url());
     }
 }
@@ -149,17 +162,23 @@ function trustpilot_get_page_id($page) {
 
 function trustpilot_get_product_sku() {
     $product = trustpilot_get_first_product();
+    $skus = array();
+    array_push($skus, TRUSTPILOT_PRODUCT_ID_PREFIX . trustpilot_get_inventory_attribute('id', $product));
+
     if (!empty($product)) {
-        return trustpilot_get_inventory_attribute('sku', $product);
-    } else {
-        return '';
+        array_push($skus, trustpilot_get_inventory_attribute('sku', $product));
     }
+    return implode(',', $skus);
 }
 
 function trustpilot_get_product_name() {
     $product = trustpilot_get_first_product();
     if (!empty($product)) {
-        return $product->get_name();
+        if (method_exists($product, 'get_name')) {
+            return $product->get_name();
+        } else {
+            return $product->get_title();
+        }
     } else {
         return '';
     }
@@ -191,7 +210,7 @@ function trustpilot_get_inventory_attribute_field($attr) {
         case 'sku':
             $field = trustpilot_get_settings('skuSelector');
             // treat 'none' as 'sku'
-            if ($field == 'none') $field = 'sku';
+            if ($field == 'none' || $field == '') $field = 'sku';
             return $field;
         case 'gtin':
             return trustpilot_get_settings('gtinSelector');
@@ -205,35 +224,20 @@ function trustpilot_get_inventory_attribute_field($attr) {
 /**
  * Get product sku based on product reviews settings
  */
-function trustpilot_get_inventory_attribute($attr, $product) {
-    $attr_field = trustpilot_get_inventory_attribute_field($attr);
+function trustpilot_get_inventory_attribute($attr, $product, $useDbAttribute = true) {
+    $attr_field = $useDbAttribute ? trustpilot_get_inventory_attribute_field($attr) : $attr;
     switch ($attr_field) {
         case 'sku':
-            $value = $product->get_sku();
+            $value = (string) (method_exists($product, 'get_sku') ?
+                $product->get_sku() : '');
             return $value ? $value : '';
         case 'id':
-            return (string)$product->get_id();
-        case 'upc':
-        case 'isbn':
-        case 'brand':
-        case 'mpn':
-        case 'gtin':
-            $value = $product->get_attribute($attr_field);
+            $value = (string) (method_exists($product, 'get_id') ?
+                $product->get_id() :
+                $product->id);
             return $value ? $value : '';
         default:
-            return '';
-    }
-}
-
-function trustpilot_log_error($message) {
-    try {
-        $logger = wc_get_logger();
-        $logger->error($message, array('source' => 'trustpilot-reviews'));
-
-        $trustpilot_api = new TrustpilotHttpClient(TRUSTPILOT_API_URL);
-        $data = array('error' => $message);
-        $trustpilot_api->postLog($data);
-    } catch (Exception $e) {
-        return false;
+            $value = $product->get_attribute($attr_field);
+            return $value ? $value : '';
     }
 }

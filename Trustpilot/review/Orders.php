@@ -55,15 +55,16 @@ class Orders {
         $general_settings = trustpilot_get_settings(TRUSTPILOT_GENERAL_CONFIGURATION);
         $key = $general_settings->key;
         $trustpilot_api = new TrustpilotHttpClient(TRUSTPILOT_API_URL);
+        $hook = 'woocommerce_order_status_changed';
 
         if (!empty($key)) {
             try {
-                $invitation = $this->trustpilot_get_invitation($order, 'woocommerce_order_status_changed', WITHOUT_PRODUCT_DATA);
+                $invitation = $this->trustpilot_get_invitation($order, $hook, WITHOUT_PRODUCT_DATA);
                 if (in_array($order_status, $general_settings->mappedInvitationTrigger) && trustpilot_compatible()) {
                     $response = $trustpilot_api->postInvitation($key, $invitation);
 
                     if ($response['code'] == 202) {
-                        $invitation = $this->trustpilot_get_invitation($order, 'woocommerce_order_status_changed', WITH_PRODUCT_DATA);
+                        $invitation = $this->trustpilot_get_invitation($order, $hook, WITH_PRODUCT_DATA);
                         $response = $trustpilot_api->postInvitation($key, $invitation);
                     }
 
@@ -72,9 +73,22 @@ class Orders {
                     $invitation['payloadType'] = 'OrderStatusUpdate';
                     $trustpilot_api->postInvitation($key, $invitation);
                 }
-            } catch (Exception $e) {
-                $message = 'Unable to send invitation for order id: ' . $order_id . '. Error: ' . $e->getMessage();
-                Logger::trustpilot_error_log($message);
+            } catch (\Throwable $e) {
+                $message = 'Unable to send invitation for order id: ' . $order_id;
+                Logger::error($e, $message, array(
+                    'key' => $key,
+                    'orderId' => $order_id,
+                    'orderStatus' => $order_status,
+                    'hook' => $hook,
+                ));
+            } catch (\Exception $e) {
+                $message = 'Unable to send invitation for order id: ' . $order_id;
+                Logger::error($e, $message, array(
+                    'key' => $key,
+                    'orderId' => $order_id,
+                    'orderStatus' => $order_status,
+                    'hook' => $hook,
+                ));
             }
         }
     }
@@ -83,15 +97,43 @@ class Orders {
 	 * WooCommerce order confirmed. Frontend side
 	 */
     public function trustpilot_thankYouPageLoaded($order_id) {
-        $general_settings = trustpilot_get_settings(TRUSTPILOT_GENERAL_CONFIGURATION);
-        $invitation = $this->trustpilot_get_invitation_by_order_id($order_id, 'woocommerce_thankyou');
-        if (!in_array('trustpilotOrderConfirmed', $general_settings->mappedInvitationTrigger)) {
-            $invitation['payloadType'] = 'OrderStatusUpdate';
+        $pluginStatus = new TrustpilotPluginStatus();
+        $code = $pluginStatus->checkPluginStatus(get_option('siteurl'));
+        if ($code > 250 && $code < 254) {
+            return;
         }
 
-        wp_register_script('tp-invitation', plugins_url('assets/js/thankYouScript.js', __FILE__));
-        wp_localize_script('tp-invitation', 'trustpilot_order_data', array(TRUSTPILOT_ORDER_DATA => $invitation));
-        wp_enqueue_script ('tp-invitation');
+        $general_settings = trustpilot_get_settings(TRUSTPILOT_GENERAL_CONFIGURATION);
+        $invitation = $this->trustpilot_get_invitation_by_order_id($order_id, 'woocommerce_thankyou');
+
+        if (!is_null($invitation)) {
+            try {
+                /**
+                 * ROI data
+                 */
+                $order = wc_get_order($order_id);
+                $invitation['totalCost'] = $order->get_total();
+                $invitation['currency'] = $order->get_currency();
+            } catch (\Throwable $e) {
+                $message = 'Unable to collect ROI data on frontend checkout for order id: ' . $order_id;
+                Logger::error($e, $message, array(
+                    'orderId' => $order_id,
+                ));
+            } catch (\Exception $e) {
+                $message = 'Unable to collect ROI data on frontend checkout for order id: ' . $order_id;
+                Logger::error($e, $message, array(
+                    'orderId' => $order_id,
+                ));
+            }
+
+            if (!in_array('trustpilotOrderConfirmed', $general_settings->mappedInvitationTrigger)) {
+                $invitation['payloadType'] = 'OrderStatusUpdate';
+            }
+
+            wp_register_script('tp-invitation', plugins_url('assets/js/thankYouScript.js', __FILE__));
+            wp_localize_script('tp-invitation', 'trustpilot_order_data', array(TRUSTPILOT_ORDER_DATA => $invitation));
+            wp_enqueue_script ('tp-invitation');
+        }
     }
 
     /**
@@ -112,9 +154,18 @@ class Orders {
                 $failed_orders->{$order['referenceId']} = base64_encode('Automatic invitation sending failed');
                 trustpilot_set_field(TRUSTPILOT_FAILED_ORDERS_FIELD, $failed_orders);
             }
-        } catch (Exception $e) {
-            $message = 'Unable to update past orders for order id: ' . $order->get_id() . '. Error: ' . $e->getMessage();
-            Logger::trustpilot_error_log($message);
+        } catch (\Throwable $e) {
+            $message = 'Unable to update past orders for order id: ' . $order['referenceId'];
+            Logger::error($e, $message, array(
+                'referenceId' => $order['referenceId'],
+                'responseCode' => $response['code'],
+            ));
+        } catch (\Exception $e) {
+            $message = 'Unable to update past orders for order id: ' . $order['referenceId'];
+            Logger::error($e, $message, array(
+                'referenceId' => $order['referenceId'],
+                'responseCode' => $response['code'],
+            ));
         }
     }
 
@@ -122,8 +173,24 @@ class Orders {
 	 * Get order details
 	 */
     public function trustpilot_get_invitation_by_order_id($order_id, $hook, $collect_product_data = WITH_PRODUCT_DATA) {
-        $order = wc_get_order($order_id);
-        return $this->trustpilot_get_invitation($order, $hook, $collect_product_data);
+        $invitation = null;
+        try {
+            $order = wc_get_order($order_id);
+            $invitation = $this->trustpilot_get_invitation($order, $hook, $collect_product_data);
+        } catch (\Throwable $e) {
+            $message = 'Unable to get invitation by order id: ' . $order_id;
+            Logger::error($e, $message, array(
+                'orderId' => $order_id,
+                'hook' => $hook,
+            ));
+        } catch (\Exception $e) {
+            $message = 'Unable to get invitation by order id: ' . $order_id;
+            Logger::error($e, $message, array(
+                'orderId' => $order_id,
+                'hook' => $hook,
+            ));
+        }
+        return $invitation;
     }
 
     private function get_order_billing_first_name($order){
@@ -154,7 +221,6 @@ class Orders {
     * Get order details
     */
    public function trustpilot_get_invitation($order, $hook, $collect_product_data = WITH_PRODUCT_DATA) {
-        $invitation = null;
         if (!is_null($this->get_order_id($order))) {
             $invitation = array();
             $billing_email = $this->get_order_billing_email($order);
@@ -166,6 +232,7 @@ class Orders {
             }
             $invitation['recipientName'] = $this->get_order_billing_first_name($order) . ' ' . $this->get_order_billing_last_name($order);
             $invitation['referenceId'] = (string)$this->get_order_id($order);
+            $invitation['templateParams'] = array(is_multisite() ? get_blog_details()->blog_id : 1);
             $invitation['source'] = 'WooCommerce-' . trustpilot_get_woo_version_number();
             $invitation['pluginVersion'] = TRUSTPILOT_PLUGIN_VERSION;
             $order_status = $order->get_status();
@@ -178,8 +245,10 @@ class Orders {
                 $invitation['products'] = $products;
                 $invitation['productSkus'] = $this->getSkus($products);
             }
+            return $invitation;
+        } else {
+            throw new \Exception('Failed to collect invitation data for order');
         }
-        return $invitation;
     }
 
     /**
@@ -202,19 +271,31 @@ class Orders {
                     $product_data['name'] = $product['name'];
                     $product_data['imageUrl'] = $this->trustpilot_get_product_image_url($product['product_id']);
 
-                    if ($_product->get_attribute('brand')) {
-                        $product_data['brand'] = $_product->get_attribute('brand');
-                    }
+                    $product_data['brand'] = $_product->get_attribute('brand');
 
                     $product_data['sku'] = trustpilot_get_inventory_attribute('sku', $_product);
                     $product_data['gtin'] = trustpilot_get_inventory_attribute('gtin', $_product);
                     $product_data['mpn'] = trustpilot_get_inventory_attribute('mpn', $_product);
+                    $product_data['productId'] = trustpilot_get_inventory_attribute('id', $_product);
+
+                    $product_data['price'] = $_product->get_price();
+                    $product_data['currency'] = get_woocommerce_currency();
+                    $product_data['categories'] = $this->get_product_categories($_product);
+                    $product_data['description'] = $this->get_product_description($_product);
+                    $product_data['images'] = $this->get_product_image_urls($_product);
+                    $product_data['videos'] = null;
+                    $product_data['tags'] = $this->get_product_tags($_product);
+                    $product_data['manufacturer'] = $_product->get_attribute('manufacturer');
+                    $product_data['meta'] = null;
                 }
                 array_push($products, $product_data);
             }
-        } catch (Exception $e) {
-            $message = 'Unable to get products. Error: ' . $e->getMessage();
-            Logger::trustpilot_error_log($message);
+        } catch (\Throwable $e) {
+            $message = 'Unable to get products.';
+            Logger::error($e, $message);
+        } catch (\Exception $e) {
+            $message = 'Unable to get products.';
+            Logger::error($e, $message);
         }
         return $products;
     }
@@ -252,5 +333,74 @@ class Orders {
         } else {
            return trustpilot_legacy_get_all_wc_orders($args);
         }
+    }
+
+    /**
+     * get product category names as an array
+     */
+    public function get_product_categories($product) {
+        $category_names = array();
+        $categories = wp_get_post_terms($product->get_id(), 'product_cat');
+        foreach($categories as $category) {
+            array_push($category_names, $category->name);
+        }
+        return $category_names;
+    }
+
+    /**
+     * get all product images as an array of urls
+     */
+    public function get_product_image_urls($product) {
+        $image_urls = array();
+
+        $url = $this->trustpilot_get_product_image_url($product->get_id());
+        if ($url) {
+            array_push($image_urls, $url);
+        }
+
+        $attachment_ids = $product->get_gallery_image_ids();
+        foreach($attachment_ids as $attachment_id) {
+            $url = wp_get_attachment_url($attachment_id);
+            if ($url) {
+                array_push($image_urls, $url);
+            }
+        }
+
+        if ($product->get_type() === 'variation') {
+            $parent = wc_get_product($product->get_parent_id());
+            $attachment_ids = $parent->get_gallery_image_ids();
+            foreach($attachment_ids as $attachment_id) {
+                $url = wp_get_attachment_url($attachment_id);
+                if ($url) {
+                    array_push($image_urls, $url);
+                }
+            }
+        }
+        return $image_urls;
+    }
+
+    /**
+     * get product tags as an array
+     */
+    public function get_product_tags($product) {
+        $tags = array();
+        $terms = wp_get_post_terms($product->get_id(), 'product_tag');
+        foreach($terms as $tag) {
+            array_push($tags, $tag->name);
+        }
+        return $tags;
+    }
+
+    public function get_product_description($product) {
+        $description = $product->get_description();
+        if (empty($description)) {
+            if ($product->get_type() === 'variation') {
+                $parent = wc_get_product($product->get_parent_id());
+                $description = $parent->get_description() ? $parent->get_description() : $parent->get_short_description();
+            } else {
+                $description = $product->get_short_description();
+            }
+        }
+        return wp_strip_all_tags($description);
     }
 }

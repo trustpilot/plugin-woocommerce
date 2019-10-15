@@ -86,14 +86,17 @@ class Plugin {
         $trustpilot_settings = get_option('trustpilot_settings', trustpilot_get_default_settings());
         $trustpilot_past_orders = get_option('trustpilot_past_orders', trustpilot_get_default_past_orders());
         $trustpilot_failed_orders = get_option('trustpilot_failed_orders', trustpilot_get_default_failed_orders());
+        $trustpilot_plugin_status = get_option(TRUSTPILOT_PLUGIN_STATUS, trustpilot_get_default_plugin_status());
         add_option('trustpilot_settings', $trustpilot_settings);
         add_option('trustpilot_past_orders', $trustpilot_past_orders);
         add_option('trustpilot_failed_orders', $trustpilot_failed_orders);
+        add_option(TRUSTPILOT_PLUGIN_STATUS, $trustpilot_plugin_status);
         add_option('show_past_orders_initial', 'true');
         add_option('sync_in_progress', 'false');
         $trustpilot_api = new TrustpilotHttpClient(TRUSTPILOT_API_URL);
         $data = array(
             'settings'   => $trustpilot_settings,
+            'version'    => TRUSTPILOT_PLUGIN_VERSION,
             'event'      => 'Activated',
             'platform'   => 'Wordpress-Woocommerce'
 
@@ -112,6 +115,7 @@ class Plugin {
         $trustpilot_api = new TrustpilotHttpClient(TRUSTPILOT_API_URL);
         $data = array(
             'settings'   => $trustpilot_settings,
+            'version'    => TRUSTPILOT_PLUGIN_VERSION,
             'event'      => 'Deactivated',
             'platform'   => 'Wordpress-Woocommerce'
 
@@ -120,6 +124,7 @@ class Plugin {
         update_option('trustpilot_settings', trustpilot_get_default_settings());
         update_option('trustpilot_past_orders', trustpilot_get_default_past_orders());
         update_option('trustpilot_failed_orders', trustpilot_get_default_failed_orders());
+        update_option(TRUSTPILOT_PLUGIN_STATUS, trustpilot_get_default_plugin_status());
         update_option('show_past_orders_initial', 'true');
     }
 

@@ -11,6 +11,17 @@ function inIframe () {
     }
 }
 
+function tryParseJson(str) {
+    if (typeof str === 'string') {
+        try {
+            return JSON.parse(str);
+        } catch (e) {
+            return false;
+        }
+    }
+    return false;
+}
+
 if (inIframe()) {
     window.addEventListener('message', function(e) {
         var adminOrign = new URL(window.location).hostname;
@@ -21,22 +32,32 @@ if (inIframe()) {
             if (typeof e.data === 'string' && e.data === 'submit') {
                 TrustpilotPreview.sendTrustboxes();
             } else {
-                jsonData = JSON.parse(e.data);
-                if (jsonData.trustbox) {
-                    TrustpilotPreview.setSettings(jsonData.trustbox);
-                } else if (jsonData.customised) {
-                    TrustpilotPreview.updateActive(jsonData.customised);
+                jsonData = tryParseJson(e.data)
+                if (jsonData) {
+                    if (jsonData.trustbox) {
+                        TrustpilotPreview.setSettings(jsonData.trustbox);
+                    } else if (jsonData.customised) {
+                        TrustpilotPreview.updateActive(jsonData.customised);
+                    }
                 }
+                return;
             }
         } else {
-            var p = document.createElement("script");
-            p.type = "text/javascript";
-            p.onload = function () {
-                const iFrame = e.source.parent.document.getElementById('configuration_iframe').contentWindow;
-                TrustpilotPreview.init([trustpilot_settings['PreviewCssUrl'], trustpilot_settings['PreviewWPCssUrl']], JSON.parse(e.data), iFrame, e.source);
-            };
-            p.src = trustpilot_settings['PreviewScriptUrl'];
-            document.head.appendChild(p);
+
+            var settings = tryParseJson(e.data);
+            if (settings) {
+                if (settings.trustboxes) {
+                    var p = document.createElement("script");
+                    p.type = "text/javascript";
+                    p.onload = function () {
+                        const iFrame = e.source.parent.document.getElementById('configuration_iframe').contentWindow;
+                        TrustpilotPreview.init([trustpilot_settings['PreviewCssUrl'], trustpilot_settings['PreviewWPCssUrl']], settings, iFrame, e.source);
+                    };
+                    p.src = trustpilot_settings['PreviewScriptUrl'];
+                    document.head.appendChild(p);
+                }
+            }
+            return;
         }
     });
 }

@@ -69,49 +69,74 @@ class TrustBox {
 		add_action ( 'wp_enqueue_scripts', array( $this, 'load_trustbox' ) );
     }
 
+    public function getPage() {
+        if (is_product()) {
+            return 'product';
+        } else if (is_product_category()) {
+            return 'category';
+        } else if (is_front_page()) {
+            return 'landing';
+        }
+    }
+
     public function load_trustbox(){
-        $settings = trustpilot_get_settings(TRUSTPILOT_TRUSTBOX_CONFIGURATION);
-        if ($settings->trustboxes) {
-            $current_url = rtrim($this->getCurrentUrl(), '/');
-            $current_url_trustboxes = $this->getAvailableTrustboxesByPage($settings, $current_url);
-
-            if (is_product()) {
-                $current_url_trustboxes = array_merge((array) $this->getAvailableTrustboxesByPage($settings, 'product'), (array) $current_url_trustboxes);
-            } else if (is_product_category()) {
-                $current_url_trustboxes = array_merge((array) $this->getAvailableTrustboxesByPage($settings, 'category'),(array) $current_url_trustboxes);
-            } else if (is_front_page()) {
-                $current_url_trustboxes = array_merge((array) $this->getAvailableTrustboxesByPage($settings, 'landing'),(array) $current_url_trustboxes);
-            }
-            if (count($current_url_trustboxes) > 0) {
-                $settings->trustboxes = $current_url_trustboxes;
-                $this->load_trustboxes($settings);
-            }
-        }
+        $trustbox = trustpilot_get_settings(TRUSTPILOT_TRUSTBOX_CONFIGURATION);
+        $settings = array(
+            'page' => $this->getPage(),
+            'sku' => $this->getSku(),
+            'name' => $this->getName()
+        );
+        $trusboxes = isset($trustbox->trustboxes) ? $trustbox->trustboxes : array();
+        $this->load_trustboxes($settings, $trusboxes);
     }
 
-    function getAvailableTrustboxesByPage($settings, $page, $includeSku = false) {
-        $data = [];
-        foreach ($settings->trustboxes as $trustbox) {
-            if (rtrim($trustbox->page, '/') == $page && $trustbox->enabled == 'enabled') {
-                if (is_product()) {
-                    $product = wc_get_product( get_the_id() );
-                    $trustbox->sku = trustpilot_get_inventory_attribute('sku', $product);
-                    $trustbox->name = $product->get_name();
+    public function getName() {
+        if (is_product()) {
+            $product = wc_get_product( get_the_id() );
+            return method_exists($product, 'get_name') ? $product->get_name() : $product->get_title();
+        }
+        return null;
+    }
+
+    public function getSku() {
+        if (is_product()) {
+            $product = wc_get_product( get_the_id() );
+            if ($product->is_type('variable')) {
+                // make a list of product sku plus skus of all variations
+                $skus = array();
+                $productSku = trustpilot_get_inventory_attribute('sku', $product);
+                if ($productSku) {
+                    array_push($skus, $productSku);
                 }
-                array_push($data, $trustbox);
+                array_push($skus, TRUSTPILOT_PRODUCT_ID_PREFIX . trustpilot_get_inventory_attribute('id', $product));
+                $variation_ids = $product->get_children();
+                if ($variation_ids) {
+                    foreach ($variation_ids as $variation_id) {
+                        $variation = wc_get_product($variation_id);
+                        $sku = trustpilot_get_inventory_attribute('sku', $variation);
+                        if ($sku) {
+                            array_push($skus, $sku);
+                        }
+                        array_push($skus, TRUSTPILOT_PRODUCT_ID_PREFIX . trustpilot_get_inventory_attribute('id', $product));
+                    }
+                }
+                return implode(',', $skus);
+            } else {
+                $skus = array();
+                $sku = trustpilot_get_inventory_attribute('sku', $product);
+                if ($sku) {
+                    array_push($skus, $sku);
+                }
+                array_push($skus, TRUSTPILOT_PRODUCT_ID_PREFIX . trustpilot_get_inventory_attribute('id', $product));
+                return $skus;
             }
         }
-        return $data;
     }
 
-    function load_trustboxes($settings){
+    function load_trustboxes($settings, $trustbox){
         wp_register_script('trustbox', plugins_url('assets/js/trustBoxScript.js', __FILE__));
-        wp_localize_script('trustbox', 'trustbox_settings', array('data' => $settings));
+        wp_localize_script('trustbox', 'trustbox_settings', $settings);
+        wp_localize_script('trustbox', 'trustpilot_trustbox_settings', array("trustboxes" => $trustbox));
         wp_enqueue_script ('trustbox');
-    }
-
-    private function getCurrentUrl(){
-        $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' || $_SERVER['SERVER_PORT'] == 443) ? 'https:' : 'http:';
-        return $protocol . '//' . $_SERVER['HTTP_HOST'].$_SERVER['REQUEST_URI'];
     }
 }

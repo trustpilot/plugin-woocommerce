@@ -46,7 +46,7 @@ class PastOrders
                 $pageId = 1;
                 $post_batch = $this->trustpilot_get_orders_for_period($period_in_days, $collect_product_data, $pageId);
                 while ($post_batch) {
-                    set_time_limit(30);
+                    set_time_limit(120);
                     $batch = null;
                     if (!is_null($post_batch)) {
                         $batch['invitations'] = $post_batch;
@@ -73,9 +73,16 @@ class PastOrders
                     $post_batch = $this->trustpilot_get_orders_for_period($period_in_days, $collect_product_data, $pageId);
                 }
             }
-        } catch (Exception $e) {
-            $message = 'Failed to sync past orders. Error: ' . $e->getMessage();
-            Logger::trustpilot_error_log($message);
+        } catch (\Throwable $e) {
+            $message = 'Failed to sync past orders.';
+            Logger::error($e, $message, array(
+                'periodInDays' => $period_in_days,
+            ));
+        } catch (\Exception $e) {
+            $message = 'Failed to sync past orders.';
+            Logger::error($e, $message, array(
+                'periodInDays' => $period_in_days,
+            ));
         }
         update_option('sync_in_progress', 'false');
     }
@@ -95,7 +102,7 @@ class PastOrders
 
                 $chunked_failed_orders = array_chunk($failed_orders_array, 10, true);
                 foreach ($chunked_failed_orders as $failed_orders_chunk) {
-                    set_time_limit(30);
+                    set_time_limit(120);
                     $post_batch = $this->trustpilot_get_orders_by_ids($collect_product_data, $failed_orders_chunk);
 
                     $batch = null;
@@ -117,9 +124,12 @@ class PastOrders
                     }
                 }
             }
-        } catch (Exception $e) {
-            $message = 'Failed to resync failed orders. Error: ' . $e->getMessage();
-            Logger::trustpilot_error_log($message);
+        } catch (\Throwable $e) {
+            $message = 'Failed to resync failed orders.';
+            Logger::error($e, $message);
+        } catch (\Exception $e) {
+            $message = 'Failed to resync failed orders.';
+            Logger::error($e, $message);
         }
         update_option('sync_in_progress', 'false');
     }
@@ -172,9 +182,25 @@ class PastOrders
         $invitations = array();
 
         foreach ($paged_orders as $order) {
-            $invitation = Orders::get_instance()->trustpilot_get_invitation($order, 'past-orders', $collect_product_data);
-            if (!is_null($invitation)) {
-                array_push($invitations, $invitation);
+            try {
+                $invitation = Orders::get_instance()->trustpilot_get_invitation($order, 'past-orders', $collect_product_data);
+                if (!is_null($invitation)) {
+                    array_push($invitations, $invitation);
+                }
+            } catch (\Throwable $e) {
+                $message = 'Unable to get invitation data for past orders period: ' . $period_in_days;
+                Logger::error($e, $message, array(
+                    'periodInDays' => $period_in_days,
+                    'collectProductData' => $collect_product_data,
+                    'pageId' => $pageId,
+                ));
+            } catch (\Exception $e) {
+                $message = 'Unable to get invitation data for past orders period: ' . $period_in_days;
+                Logger::error($e, $message, array(
+                    'periodInDays' => $period_in_days,
+                    'collectProductData' => $collect_product_data,
+                    'pageId' => $pageId,
+                ));
             }
         }
         wp_cache_flush();
