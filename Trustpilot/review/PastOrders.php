@@ -10,6 +10,8 @@
  * @copyright 2018 Trustpilot
  */
 
+use Trustpilot\Review\TrustpilotLogger;
+
 namespace Trustpilot\Review;
 
 /**
@@ -75,12 +77,12 @@ class PastOrders
             }
         } catch (\Throwable $e) {
             $message = 'Failed to sync past orders.';
-            Logger::error($e, $message, array(
+            TrustpilotLogger::error($e, $message, array(
                 'periodInDays' => $period_in_days,
             ));
         } catch (\Exception $e) {
             $message = 'Failed to sync past orders.';
-            Logger::error($e, $message, array(
+            TrustpilotLogger::error($e, $message, array(
                 'periodInDays' => $period_in_days,
             ));
         }
@@ -126,10 +128,10 @@ class PastOrders
             }
         } catch (\Throwable $e) {
             $message = 'Failed to resync failed orders.';
-            Logger::error($e, $message);
+            TrustpilotLogger::error($e, $message);
         } catch (\Exception $e) {
             $message = 'Failed to resync failed orders.';
-            Logger::error($e, $message);
+            TrustpilotLogger::error($e, $message);
         }
         update_option('sync_in_progress', 'false');
     }
@@ -189,14 +191,14 @@ class PastOrders
                 }
             } catch (\Throwable $e) {
                 $message = 'Unable to get invitation data for past orders period: ' . $period_in_days;
-                Logger::error($e, $message, array(
+                TrustpilotLogger::error($e, $message, array(
                     'periodInDays' => $period_in_days,
                     'collectProductData' => $collect_product_data,
                     'pageId' => $pageId,
                 ));
             } catch (\Exception $e) {
                 $message = 'Unable to get invitation data for past orders period: ' . $period_in_days;
-                Logger::error($e, $message, array(
+                TrustpilotLogger::error($e, $message, array(
                     'periodInDays' => $period_in_days,
                     'collectProductData' => $collect_product_data,
                     'pageId' => $pageId,

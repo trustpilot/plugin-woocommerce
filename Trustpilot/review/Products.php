@@ -34,7 +34,7 @@ class Products {
 		return self::$instance;
     }
     
-    private function trustpilot_get_products($limit, $page) {
+    public function trustpilot_get_products($limit, $page, $category = null) {
         if (function_exists('wc_get_products')) {
             $product_args = array(
                 'visibility' => 'visible',
@@ -43,7 +43,11 @@ class Products {
                 'orderby'    => 'id',
                 'page'       => $page,
             );
-            
+
+            if ($category) {
+                $product_args['category'] = array($category->name);
+            }
+
             return wc_get_products($product_args);
         } else {
             $page = $page - 1;
@@ -54,6 +58,10 @@ class Products {
                 'post_type'      => 'product',
                 'offset'         => $page * $limit,
             );
+
+            if ($category) {
+                $product_args['category'] = $category->cat_ID;
+            }
 
             $posts = get_posts($product_args);
             $products = array();

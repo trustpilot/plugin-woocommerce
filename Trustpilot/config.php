@@ -8,7 +8,7 @@ define('TRUSTPILOT_PLUGIN_STATUS', 'trustpilot_plugin_status');
 define('TRUSTPILOT_GENERAL_CONFIGURATION', 'general');
 define('TRUSTPILOT_TRUSTBOX_CONFIGURATION', 'trustbox');
 define('TRUSTPILOT_INTEGRATION_KEY', 'key');
-define('TRUSTPILOT_PLUGIN_VERSION', '2.5.763');
+define('TRUSTPILOT_PLUGIN_VERSION', '2.5.788');
 define('TRUSTPILOT_SCRIPT', 'TrustpilotScriptUrl');
 define('TRUSTPILOT_INTEGRATION_APP', 'IntegrationAppUrl');
 define('TRUSTPILOT_WIDGET_SCRIPT', 'WidgetScriptUrl');

@@ -53,6 +53,9 @@ function receiveInternalData(e) {
         if (jsonData && jsonData.type === 'updatePageUrls') {
             submitSettings(jsonData);
         }
+        if (jsonData && jsonData.type === 'loadCategoryProductInfo') {
+            requestCategoryInfo();
+        }
         if (jsonData && jsonData.type === 'newTrustBox') {
             submitSettings(jsonData);
         }
@@ -222,6 +225,25 @@ function submitSettings(parsedData) {
     xhr.send(encodeSettings(data));
 }
 
+function requestCategoryInfo() {
+    const data = {
+        action: 'get_category_product_info'
+    };
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', ajaxurl);
+    xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+    xhr.onreadystatechange = function () {
+        if (xhr.readyState === 4) {
+            if (xhr.status >= 400) {
+                console.log(`callback error: ${xhr.response} ${xhr.status}`);
+            } else {
+                window.postMessage(xhr.response, window.origin);
+            }
+        }
+    };
+    xhr.send(encodeSettings(data));
+}
+
 function updateIframeSize(settings) {
   const iframe = document.getElementById('configuration_iframe');
   if (iframe) {
@@ -248,6 +270,7 @@ function sendSettings() {
     settings.isFromMarketplace = attrs.isFromMarketplace;
     settings.configurationScopeTree = JSON.parse(atob(attrs.configurationScopeTree));
     settings.pluginStatus = JSON.parse(atob(attrs.pluginStatus));
+    settings.mode = attrs.mode;
 
     if (settings.trustbox.trustboxes && attrs.sku) {
         for (trustbox of settings.trustbox.trustboxes) {

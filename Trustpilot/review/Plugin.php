@@ -12,6 +12,8 @@
 
 namespace Trustpilot\Review;
 
+include_once( ABSPATH . 'wp-admin/includes/plugin.php' );
+
 /**
  * @subpackage Plugin
  */
@@ -137,21 +139,18 @@ class Plugin {
     }
 
     public function trustpilot_load_js($hook){
-        include_once( ABSPATH . 'wp-admin/includes/plugin.php' );
-        if ( is_plugin_active('woocommerce/woocommerce.php') ) {
-            wp_register_script('tp-js', plugins_url('assets/js/headerScript.js', __FILE__));
-            $key = trustpilot_get_settings(TRUSTPILOT_GENERAL_CONFIGURATION)->key;
-            wp_localize_script('tp-js', 'trustpilot_settings', array(
-                TRUSTPILOT_INTEGRATION_KEY => $key,
-                TRUSTPILOT_SCRIPT => TRUSTPILOT_SCRIPT_URL,
-                TRUSTPILOT_INTEGRATION_APP => TRUSTPILOT_INTEGRATION_APP_URL,
-                TRUSTPILOT_PREVIEW_SCRIPT => TRUSTPILOT_PREVIEW_SCRIPT_URL,
-                TRUSTPILOT_PREVIEW_CSS => TRUSTPILOT_PREVIEW_CSS_URL,
-                TRUSTPILOT_WP_PREVIEW_CSS => TRUSTPILOT_WP_PREVIEW_CSS_URL,
-                TRUSTPILOT_WIDGET_SCRIPT => TRUSTPILOT_WIDGET_SCRIPT_URL,
-            ));
-            wp_enqueue_script('tp-js');
-            wp_enqueue_script('widget-bootstrap', TRUSTPILOT_WIDGET_SCRIPT_URL, null, null);
-        }
+        wp_register_script('tp-js', plugins_url('assets/js/headerScript.min.js', __FILE__));
+        $key = trustpilot_get_settings(TRUSTPILOT_GENERAL_CONFIGURATION)->key;
+        wp_localize_script('tp-js', 'trustpilot_settings', array(
+            TRUSTPILOT_INTEGRATION_KEY => $key,
+            TRUSTPILOT_SCRIPT => TRUSTPILOT_SCRIPT_URL,
+            TRUSTPILOT_INTEGRATION_APP => TRUSTPILOT_INTEGRATION_APP_URL,
+            TRUSTPILOT_PREVIEW_SCRIPT => TRUSTPILOT_PREVIEW_SCRIPT_URL,
+            TRUSTPILOT_PREVIEW_CSS => TRUSTPILOT_PREVIEW_CSS_URL,
+            TRUSTPILOT_WP_PREVIEW_CSS => TRUSTPILOT_WP_PREVIEW_CSS_URL,
+            TRUSTPILOT_WIDGET_SCRIPT => TRUSTPILOT_WIDGET_SCRIPT_URL,
+        ));
+        wp_enqueue_script('tp-js');
+        wp_enqueue_script('widget-bootstrap', TRUSTPILOT_WIDGET_SCRIPT_URL, null, null);
     }
 }
