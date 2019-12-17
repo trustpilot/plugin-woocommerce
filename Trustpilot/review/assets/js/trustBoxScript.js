@@ -17,7 +17,8 @@ function renderTrustboxes() {
     trustpilot_trustbox_settings.trustboxes = trustpilot_trustbox_settings.trustboxes.filter(function(trustBox) {
         return page === trustBox.page
             || trimTrailingSlashes(trustBox.page) === trimTrailingSlashes(location.origin + location.pathname)
-            || trustBox.page === btoa(location.origin + location.pathname).toLowerCase();
+            || trustBox.page === btoa(location.origin + location.pathname).toLowerCase()
+            || trustBox.page === btoa(trimTrailingSlashes(location.origin + location.pathname)).toLowerCase();
     });
 
     if (document.readyState !== "complete") {

@@ -8,8 +8,11 @@ class TrustpilotPluginStatus
     public function checkPluginStatus($origin)
     {
         $settings = trustpilot_get_field(TRUSTPILOT_PLUGIN_STATUS);
-        if (in_array(parse_url($origin, PHP_URL_HOST), $settings->blockedDomains)) {
-            return $settings->pluginStatus;
+        if (isset($settings->blockedDomains)) {
+            $blockedDomains = $settings->blockedDomains;
+            if (is_array($blockedDomains) && in_array(parse_url($origin, PHP_URL_HOST), $blockedDomains)) {
+                return $settings->pluginStatus;
+            }
         }
         return self::SUCCESSFUL_STATUS;
     }

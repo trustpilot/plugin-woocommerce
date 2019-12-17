@@ -1,9 +1,12 @@
 <?php
 
+include_once( ABSPATH . 'wp-admin/includes/plugin.php' );
+
 use Trustpilot\Review\TrustpilotHttpClient;
+use Trustpilot\Review\TrustpilotLogger;
 
 function trustpilot_get_default_settings() {
-    return '{"general":{"key":"","invitationTrigger":"orderConfirmed"},"trustbox":{"trustboxes":[]},
+    return '{"general":{"key":"","invitationTrigger":"orderConfirmed", "mappedInvitationTrigger":[]},"trustbox":{"trustboxes":[]},
      "skuSelector": "none", "mpnSelector": "none", "gtinSelector": "none"}';
 }
 
@@ -68,13 +71,13 @@ function trustpilot_get_page_url($page) {
         return str_replace(['http:', 'https:'],'', $url);
     } catch (\Throwable $e) {
         $message = 'Unable to find URL for a page ' . $page;
-        Logger::error($e, $message, array(
+        TrustpilotLogger::error($e, $message, array(
             'page' => $page,
         ));
         return str_replace(['http:', 'https:'],'', get_home_url());
     } catch (\Exception $e) {
         $message = 'Unable to find URL for a page ' . $page;
-        Logger::error($e, $message, array(
+        TrustpilotLogger::error($e, $message, array(
             'page' => $page,
         ));
         return str_replace(['http:', 'https:'],'', get_home_url());
@@ -85,7 +88,7 @@ function trustpilot_get_landing_url() {
     return get_home_url();
 }
 
-function trustpilot_get_category_url() {
+function trustpilot_get_first_category() {
     $category_args = array(
         'taxonomy'  => 'product_cat',
         'childless' => true,
@@ -96,8 +99,16 @@ function trustpilot_get_category_url() {
     );
     $categories = (array) get_categories($category_args);
     if (is_array($categories) && !empty($categories)) {
-        $firstCategory = (object) array_values($categories)[0];
-        return get_term_link($firstCategory->term_id, 'product_cat');
+        return (object)array_values($categories)[0];
+    } else {
+        return false;
+    }
+}
+
+function trustpilot_get_category_url() {
+    $category = trustpilot_get_first_category();
+    if ($category) {
+        return get_term_link($category->term_id, 'product_cat');
     } else {
         return get_permalink(trustpilot_get_page_id('shop'));
     }
@@ -130,7 +141,7 @@ function trustpilot_get_first_product() {
 
         $posts = get_posts($product_args);
 
-        if (!empty($posts)) {
+        if (!empty($posts) && function_exists('wc_get_product')) {
             return wc_get_product($posts[0]);
         }
         else {
@@ -161,44 +172,47 @@ function trustpilot_get_page_id($page) {
 }
 
 function trustpilot_get_product_sku() {
-    $product = trustpilot_get_first_product();
     $skus = array();
-    array_push($skus, TRUSTPILOT_PRODUCT_ID_PREFIX . trustpilot_get_inventory_attribute('id', $product));
+    if ( is_plugin_active('woocommerce/woocommerce.php') ) {
+        $product = trustpilot_get_first_product();
+        array_push($skus, TRUSTPILOT_PRODUCT_ID_PREFIX . trustpilot_get_inventory_attribute('id', $product));
 
-    if (!empty($product)) {
-        array_push($skus, trustpilot_get_inventory_attribute('sku', $product));
+        if (!empty($product)) {
+            array_push($skus, trustpilot_get_inventory_attribute('sku', $product));
+        }
     }
     return implode(',', $skus);
 }
 
 function trustpilot_get_product_name() {
-    $product = trustpilot_get_first_product();
-    if (!empty($product)) {
-        if (method_exists($product, 'get_name')) {
-            return $product->get_name();
-        } else {
-            return $product->get_title();
+    if ( is_plugin_active('woocommerce/woocommerce.php') ) {
+        $product = trustpilot_get_first_product();
+        if (!empty($product)) {
+            if (method_exists($product, 'get_name')) {
+                return $product->get_name();
+            } else {
+                return $product->get_title();
+            }
         }
-    } else {
-        return '';
     }
+    return '';
 }
 
 /**
  * WooCommerce get version number
  */
 function trustpilot_get_woo_version_number() {
-    if ( ! function_exists( 'get_plugins' ) ) {
-        require_once( ABSPATH . 'wp-admin/includes/plugin.php' );
-    }
+    if ( is_plugin_active('woocommerce/woocommerce.php') ) {
+        $plugin_folder = get_plugins( '/' . 'woocommerce' );
+        $plugin_file = 'woocommerce.php';
 
-    $plugin_folder = get_plugins( '/' . 'woocommerce' );
-    $plugin_file = 'woocommerce.php';
-
-    if ( isset( $plugin_folder[$plugin_file]['Version'] ) ) {
-        return $plugin_folder[$plugin_file]['Version'];
+        if ( isset( $plugin_folder[$plugin_file]['Version'] ) ) {
+            return $plugin_folder[$plugin_file]['Version'];
+        } else {
+            return NULL;
+        }
     } else {
-        return NULL;
+        return get_bloginfo('version');
     }
 }
 

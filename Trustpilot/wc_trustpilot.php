@@ -12,15 +12,13 @@
  * @wordpress-plugin
  * Plugin Name:       Trustpilot-reviews
  * Description:       Trustpilot-reviews helps Woocommerce store owners generate a ton of reviews for their products.
- * Version:           2.5.763
+ * Version:           2.5.788
  * Author:            Trustpilot
  * Author URI:        https://trustpilot.com
  * Text Domain:       Trustpilot-reviews
  * License:           AFL-3.0
  * License URI:       https://www.afl.org/licenses/afl-3.0.txt
  */
-
-
 
 namespace Trustpilot\Review;
 
@@ -29,31 +27,10 @@ if ( ! defined( 'WPINC' ) ) {
     die;
 }
 
-/**
- * Check if WooCommerce is active
- **/
-function trustpilot_woocommerce_missing_wc_notice() {
-    echo "
-        <div class=\"error\">
-            <p>
-                Trustpilot plugin requires WooCommerce to be installed and active.
-                Please add Woocommerce plugin to your Wordpress page under Plugins section.
-                After installaing and activating plugin you will be able to activate Trustpilot plugin also.
-            </p>
-        </div>
-    ";
-}
-
-$blog_plugins = get_option( 'active_plugins', array() );
-$site_plugins = is_multisite() ? (array) maybe_unserialize( get_site_option('active_sitewide_plugins' ) ) : array();
-if ( ! ( in_array( 'woocommerce/woocommerce.php', $blog_plugins )
-    || isset( $site_plugins['woocommerce/woocommerce.php'] ) ) )
-{
-    add_action( 'admin_notices', 'Trustpilot\\Review\\trustpilot_woocommerce_missing_wc_notice' );
-    return;
-}
-
 include( plugin_dir_path( __FILE__ ) . './config.php');
+include( plugin_dir_path( __FILE__ ) . './review/api/TrustpilotPluginStatus.php');
+include( plugin_dir_path( __FILE__ ) . './review/api/TrustpilotHttpClient.php');
+include( plugin_dir_path( __FILE__ ) . './review/util/TrustpilotLogger.php');
 include( plugin_dir_path( __FILE__ ) . './helper.php');
 include( plugin_dir_path( __FILE__ ) . './legacy.php');
 define( 'TRUSTPILOT_REVIEWS_VERSION', TRUSTPILOT_PLUGIN_VERSION );

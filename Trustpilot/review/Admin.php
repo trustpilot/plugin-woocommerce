@@ -9,6 +9,7 @@
  * @link      https://trustpilot.com
  * @copyright 2018 Trustpilot
  */
+
 namespace Trustpilot\Review;
 /**
  * @subpackage Admin
@@ -61,13 +62,10 @@ class Admin {
         add_action( 'wp_ajax_reload_trustpilot_settings', array( $this, 'wc_reload_trustpilot_settings' ) );
         add_action( 'wp_ajax_check_product_skus', array( $this, 'trustpilot_check_product_skus' ) );
         add_action( 'wp_ajax_get_signup_data', array( $this, 'trustpilot_get_signup_data' ) );
+        add_action( 'wp_ajax_get_category_product_info', array( $this, 'trustpilot_get_category_product_info'));
 
         // Add the options page and menu item.
         add_action( 'admin_menu', array( $this, 'trustpilot_menu' ) );
-        // Include Http client
-        include(plugin_dir_path( __FILE__ ) . 'api/TrustpilotHttpClient.php');
-        include(plugin_dir_path( __FILE__ ) . 'api/TrustpilotPluginStatus.php');
-        include(plugin_dir_path( __FILE__ ) . 'util/Logger.php');
     }
 
     public function trustpilot_save_changes() {
@@ -151,6 +149,16 @@ class Admin {
         die();
     }
 
+    public function trustpilot_get_category_product_info() {
+        $trustbox = TrustBox::get_instance();
+        $products = Products::get_instance();
+        $category = trustpilot_get_first_category();
+        $categoryProducts = $category ? $products->trustpilot_get_products(16, 1, $category) : array();
+        $results = base64_encode(json_encode($trustbox->get_category_product_info($categoryProducts)));
+        echo $results;
+        die();
+    }
+
     private function trustpilot_get_past_orders_info() {
         $orders = PastOrders::get_instance();
         $info = $orders->get_past_orders_info();
@@ -173,9 +181,9 @@ class Admin {
      */
     public function enqueue_admin_styles($hook) {
         if ($hook == 'toplevel_page_woocommerce-trustpilot-settings-page') {
-            wp_enqueue_style( 'trustpilotSettingsStylesheet', plugins_url('/assets/css/trustpilot.css', __FILE__));
+            wp_enqueue_style( 'trustpilotSettingsStylesheet', plugins_url('/assets/css/trustpilot.min.css', __FILE__));
         }
-        wp_enqueue_style('trustpilotSideLogoStylesheet', plugins_url('/assets/css/trustpilot.css', __FILE__));
+        wp_enqueue_style('trustpilotSideLogoStylesheet', plugins_url('/assets/css/trustpilot.min.css', __FILE__));
     }
 
     /**
@@ -185,7 +193,7 @@ class Admin {
         if ( 'toplevel_page_woocommerce-trustpilot-settings-page' != $hook ) {
             return;
         }
-        wp_enqueue_script( 'boot_js', plugins_url('/assets/js/integrationScript.js', __FILE__ ));
+        wp_enqueue_script( 'boot_js', plugins_url('/assets/js/integrationScript.min.js', __FILE__ ));
         wp_localize_script('boot_js', 'trustpilot_integration_settings', array(
             'TRUSTPILOT_INTEGRATION_APP_URL' => $this->get_integration_app_url(),
         ));
@@ -220,16 +228,18 @@ class Admin {
         $fields = array('none', 'sku', 'id');
         $optionalFields = array('upc', 'isbn', 'brand');
         $dynamicFields = array('mpn', 'gtin');
-        $attrs = array_map(function ($t) { return $t->attribute_name; }, wc_get_attribute_taxonomies());
-        foreach ($attrs as $attr) {
-            foreach ($optionalFields as $field) {
-                if ($attr == $field && !in_array($field, $fields)) {
-                    array_push($fields, $field);
+        if (is_plugin_active('woocommerce/woocommerce.php')) {
+            $attrs = array_map(function ($t) { return $t->attribute_name; }, wc_get_attribute_taxonomies());
+            foreach ($attrs as $attr) {
+                foreach ($optionalFields as $field) {
+                    if ($attr == $field && !in_array($field, $fields)) {
+                        array_push($fields, $field);
+                    }
                 }
-            }
-            foreach ($dynamicFields as $field) {
-                if (stripos($attr, $field) !== false) {
-                    array_push($fields, $attr);
+                foreach ($dynamicFields as $field) {
+                    if (stripos($attr, $field) !== false) {
+                        array_push($fields, $attr);
+                    }
                 }
             }
         }
@@ -261,8 +271,10 @@ class Admin {
     private function load_iframe() {
         $pageUrls = new \stdClass();
         $pageUrls->landing = trustpilot_get_page_url('landing');
-        $pageUrls->category = trustpilot_get_page_url('category');
-        $pageUrls->product = trustpilot_get_page_url('product');
+        if (is_plugin_active('woocommerce/woocommerce.php')) {
+            $pageUrls->category = trustpilot_get_page_url('category');
+            $pageUrls->product = trustpilot_get_page_url('product');
+        }
         $urls = trustpilot_get_field('trustpilot_page_urls');
         $customTrustBoxes = json_encode(trustpilot_get_field('trustpilot_custom_TrustBoxes'));
         $pageUrls = (object) array_merge((array) $urls, (array) $pageUrls);
@@ -277,6 +289,7 @@ class Admin {
         $productIdentificationOptions = $this->get_product_identification_options();
         $configuration_scope_tree = base64_encode(json_encode($this->get_configuration_scope_tree()));
         $pluginStatus = base64_encode(json_encode(trustpilot_get_field(TRUSTPILOT_PLUGIN_STATUS)));
+        $mode = is_plugin_active('woocommerce/woocommerce.php') ? '' : 'data-mode=\'trustbox-only\''; 
         return "
             <script type='text/javascript'>
                 function onTrustpilotIframeLoad() {
@@ -311,6 +324,7 @@ class Admin {
                     data-is-from-marketplace='" . TRUSTPILOT_IS_FROM_MARKETPLACE . "'
                     data-configuration-scope-tree='" . $configuration_scope_tree . "'
                     data-plugin-status='" . $pluginStatus . "'
+                    " . $mode . "
                     onload='onTrustpilotIframeLoad();'>
                 </iframe>
                 <div id='trustpilot-trustbox-preview'
@@ -321,6 +335,7 @@ class Admin {
                     data-src='" . $startingUrl . "'
                     data-name='" . $name . "'
                     data-sku='" . $sku . "'
+                    " . $mode . "
                     data-source='WooCommerce'>
                 </div>
                 <script src='" . TRUSTPILOT_TRUSTBOX_PREVIEW_URL . "' id='TrustBoxPreviewComponent'></script>
@@ -373,12 +388,12 @@ class Admin {
             $protocol = $this->get_protocol();
         } catch (\Throwable $e) { // For PHP 7
             $message = 'Unable get protocol of the website switching to default: ' . $protocol;
-            Logger::error($e, $message, array(
+            TrustpilotLogger::error($e, $message, array(
                 'protocol' => $protocol,
             ));
         } catch (\Exception $e) { // For PHP 5
             $message = 'Unable get protocol of the website switching to default: ' . $protocol;
-            Logger::error($e, $message, array(
+            TrustpilotLogger::error($e, $message, array(
                 'protocol' => $protocol,
             ));
         }
