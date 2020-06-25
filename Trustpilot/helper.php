@@ -252,6 +252,7 @@ function trustpilot_get_inventory_attribute($attr, $product, $useDbAttribute = t
             return $value ? $value : '';
         default:
             $value = $product->get_attribute($attr_field);
+            $value = apply_filters( 'trustpilot_inventory_attribute_value', $value, $attr_field, $product );
             return $value ? $value : '';
     }
 }
