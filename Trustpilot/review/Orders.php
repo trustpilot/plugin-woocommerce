@@ -57,7 +57,7 @@ class Orders {
         $order = wc_get_order($order_id);
         $order_status = $order->get_status();
         $general_settings = trustpilot_get_settings(TRUSTPILOT_GENERAL_CONFIGURATION);
-        $key = $general_settings->key;
+        $key = apply_filter('trustpilot_order_status_changed_settings_key', $general_settings->key, $order_id);
         $trustpilot_api = new TrustpilotHttpClient(TRUSTPILOT_API_URL);
         $hook = 'woocommerce_order_status_changed';
 
